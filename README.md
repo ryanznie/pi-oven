@@ -94,6 +94,14 @@ python3 -m venv .venv
 The script uses `xy` and writes interactive HTML plus SVG exports to
 `results/plots/`.
 
+Generate a CSV and markdown analytics report:
+
+```bash
+python3 scripts/analyze_results.py
+```
+
+The report is written to `results/analytics/report.md`.
+
 If the Pi denies access to hardware counters, temporarily relax perf paranoia:
 
 ```bash

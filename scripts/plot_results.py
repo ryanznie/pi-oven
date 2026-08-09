@@ -176,6 +176,34 @@ def make_perf_chart(perf_path, output_dir):
     return save_chart(chart, output_dir, "perf_summary")
 
 
+def make_speedup_chart(records, output_dir):
+    baseline = records.get("kv/q8_0") or records.get("threads/4")
+    if baseline is None:
+        return None
+
+    baseline_elapsed = float(baseline.get("elapsed_sec") or 0)
+    if baseline_elapsed <= 0:
+        return None
+
+    labels = []
+    speedups = []
+    for label, record in records.items():
+        elapsed = float(record.get("elapsed_sec") or 0)
+        if elapsed <= 0:
+            continue
+        labels.append(label)
+        speedups.append(baseline_elapsed / elapsed)
+
+    chart = xy.bar_chart(
+        xy.bar(labels, speedups, color="#0891b2", corner_radius=4),
+        xy.x_axis(label="Experiment"),
+        xy.y_axis(label="Speedup vs kv/q8_0 baseline"),
+        THEME,
+        title="Relative Speed (1.0 = q8 KV baseline)",
+    )
+    return save_chart(chart, output_dir, "relative_speedup")
+
+
 def write_index(paths, output_dir):
     links = []
     for html_path, svg_path in paths:
@@ -231,6 +259,7 @@ def main():
 
     optional_outputs = [
         make_threads_chart(records, args.output_dir),
+        make_speedup_chart(records, args.output_dir),
         make_perf_chart(args.perf, args.output_dir),
     ]
     outputs.extend(output for output in optional_outputs if output is not None)
