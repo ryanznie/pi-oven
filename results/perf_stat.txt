@@ -1,0 +1,17 @@
+ Performance counter stats for '/home/mindfulmakers/pi-oven/vendor/llama.cpp/build/bin/llama-cli -m /home/mindfulmakers/pi-oven/models/qwen2.5-1.5b-instruct-q4_k_m.gguf -p Give a concise checklist for optimizing LLM inference on Raspberry Pi. -n 128 -c 2048 -t 4 --no-conversation --single-turn --cache-type-k q8_0 --cache-type-v q8_0 --show-timings':
+
+   184,050,220,850      task-clock:u                     #    3.422 CPUs utilized             
+                 0      context-switches:u               #    0.000 /sec                      
+                 0      cpu-migrations:u                 #    0.000 /sec                      
+            94,078      page-faults:u                    #  511.154 /sec                      
+   261,415,626,092      instructions:u                   #    0.80  insn per cycle            
+   325,226,975,500      cycles:u                         #    1.767 GHz                       
+        33,173,439      branch-misses:u                                                       
+    61,832,656,289      L1-dcache-loads:u                #  335.955 M/sec                     
+       409,165,933      L1-dcache-load-misses:u          #    0.66% of all L1-dcache accesses 
+
+      53.784186892 seconds time elapsed
+
+     182.391185000 seconds user
+       1.533510000 seconds sys
+
