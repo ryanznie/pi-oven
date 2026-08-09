@@ -4,6 +4,7 @@ import json
 import os
 import platform
 import re
+import selectors
 import subprocess
 import time
 from pathlib import Path
@@ -16,7 +17,10 @@ DEFAULT_PROMPT = (
 )
 
 
-def run_command(cmd, timeout):
+def run_command(cmd, timeout, measure_ttft=False):
+    if measure_ttft:
+        return run_streaming_command(cmd, timeout)
+
     started = time.time()
     try:
         proc = subprocess.run(
@@ -44,18 +48,91 @@ def run_command(cmd, timeout):
     }
 
 
+def run_streaming_command(cmd, timeout):
+    started = time.time()
+    output_chunks = []
+    ttft_sec = None
+    proc = subprocess.Popen(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        bufsize=0,
+    )
+
+    selector = selectors.DefaultSelector()
+    selector.register(proc.stdout, selectors.EVENT_READ, "stdout")
+    selector.register(proc.stderr, selectors.EVENT_READ, "stderr")
+
+    timed_out = False
+    while selector.get_map():
+        if time.time() - started > timeout:
+            timed_out = True
+            proc.kill()
+            break
+
+        events = selector.select(timeout=0.2)
+        if not events and proc.poll() is not None:
+            break
+
+        for key, _ in events:
+            chunk = key.fileobj.read1(4096) if hasattr(key.fileobj, "read1") else key.fileobj.read(4096)
+            if not chunk:
+                selector.unregister(key.fileobj)
+                continue
+
+            stream_name = key.data
+            text = chunk.decode("utf-8", errors="replace")
+            output_chunks.append(text)
+            if stream_name == "stdout" and ttft_sec is None and text.strip():
+                ttft_sec = round(time.time() - started, 3)
+
+    try:
+        returncode = proc.wait(timeout=1)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        returncode = proc.wait()
+        timed_out = True
+
+    output = "".join(output_chunks)
+    if timed_out and not output:
+        output = f"Timed out after {timeout} seconds"
+
+    return {
+        "command": cmd,
+        "returncode": 124 if timed_out else returncode,
+        "elapsed_sec": round(time.time() - started, 3),
+        "output": output,
+        "timed_out": timed_out,
+        "ttft_sec": ttft_sec,
+    }
+
+
 def parse_llama_timings(output):
     parsed = {}
     rate_pattern = re.compile(r"([0-9.]+)\s*(?:tokens per second|tok/s)", re.IGNORECASE)
+    time_pattern = re.compile(r"([0-9.]+)\s*ms", re.IGNORECASE)
+    token_pattern = re.compile(r"/\s*([0-9]+)\s*(?:tokens|runs)", re.IGNORECASE)
     for line in output.splitlines():
-        match = rate_pattern.search(line)
-        if not match:
-            continue
         lower = line.lower()
+        time_match = time_pattern.search(line)
+        token_match = token_pattern.search(line)
+        rate_match = rate_pattern.search(line)
+        if "load time" in lower and time_match:
+            parsed["load_time_ms"] = float(time_match.group(1))
         if "prompt eval time" in lower:
-            parsed["prompt_tokens_per_sec"] = float(match.group(1))
+            if time_match:
+                parsed["prompt_eval_ms"] = float(time_match.group(1))
+            if token_match:
+                parsed["prompt_tokens"] = int(token_match.group(1))
+            if rate_match:
+                parsed["prompt_tokens_per_sec"] = float(rate_match.group(1))
         elif "eval time" in lower:
-            parsed["generation_tokens_per_sec"] = float(match.group(1))
+            if time_match:
+                parsed["generation_eval_ms"] = float(time_match.group(1))
+            if token_match:
+                parsed["generation_tokens_or_runs"] = int(token_match.group(1))
+            if rate_match:
+                parsed["generation_tokens_per_sec"] = float(rate_match.group(1))
     return parsed
 
 
@@ -91,7 +168,7 @@ def benchmark_cli(args, label, extra_args, timeout=900):
     ] + extra_args
 
     print(f"\n==> Running {label} ({args.n_gen} generated tokens, {args.threads} threads)", flush=True)
-    result = run_command(cmd, timeout=timeout)
+    result = run_command(cmd, timeout=timeout, measure_ttft=True)
     record = {
         "label": label,
         "suite": "cli",
@@ -103,6 +180,7 @@ def benchmark_cli(args, label, extra_args, timeout=900):
         "timing_lines": timing_lines(result["output"]),
         "returncode": result["returncode"],
         "timed_out": result["timed_out"],
+        "ttft_sec": result.get("ttft_sec"),
         "elapsed_sec": result["elapsed_sec"],
         "command": " ".join(cmd),
     }

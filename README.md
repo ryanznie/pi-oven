@@ -102,6 +102,17 @@ python3 scripts/analyze_results.py
 
 The report is written to `results/analytics/report.md`.
 
+Useful ordering options:
+
+```bash
+python3 scripts/analyze_results.py --sort-by tps
+python3 scripts/analyze_results.py --sort-by elapsed
+python3 scripts/analyze_results.py --sort-by ttft
+```
+
+New benchmark runs also record TTFT, measured as wall-clock time from process
+start to the first generated stdout token.
+
 If the Pi denies access to hardware counters, temporarily relax perf paranoia:
 
 ```bash

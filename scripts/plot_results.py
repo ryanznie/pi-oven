@@ -53,6 +53,11 @@ def estimate_tokens_per_second(record):
     return float(n_gen) / elapsed
 
 
+def ttft_sec(record):
+    value = record.get("ttft_sec")
+    return float(value) if value is not None else None
+
+
 def latest_success_by_label(records):
     latest = {}
     for record in records:
@@ -132,6 +137,29 @@ def make_threads_chart(records, output_dir):
         title="Thread Scaling (threads vs estimated tokens/sec)",
     )
     return save_chart(chart, output_dir, "thread_scaling")
+
+
+def make_ttft_chart(records, output_dir):
+    labels = []
+    values = []
+    for label, record in records.items():
+        ttft = ttft_sec(record)
+        if ttft is None:
+            continue
+        labels.append(label)
+        values.append(ttft)
+
+    if not values:
+        return None
+
+    chart = xy.bar_chart(
+        xy.bar(labels, values, color="#dc2626", corner_radius=4),
+        xy.x_axis(label="Experiment"),
+        xy.y_axis(label="TTFT seconds"),
+        THEME,
+        title="Time To First Token (seconds, lower is better)",
+    )
+    return save_chart(chart, output_dir, "ttft_seconds")
 
 
 def parse_perf_stat(path):
@@ -258,6 +286,7 @@ def main():
     ]
 
     optional_outputs = [
+        make_ttft_chart(records, args.output_dir),
         make_threads_chart(records, args.output_dir),
         make_speedup_chart(records, args.output_dir),
         make_perf_chart(args.perf, args.output_dir),

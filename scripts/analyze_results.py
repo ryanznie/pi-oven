@@ -54,6 +54,18 @@ def estimated_tps(record):
     return None
 
 
+def ttft_sec(record):
+    value = record.get("ttft_sec")
+    return float(value) if value is not None else None
+
+
+def latency_ms_per_token(record):
+    tps = estimated_tps(record)
+    if tps and tps > 0:
+        return 1000 / tps
+    return None
+
+
 def latest_successful_cli(records):
     latest = {}
     for record in records:
@@ -65,11 +77,19 @@ def latest_successful_cli(records):
 
 def row_for(label, record):
     tps = estimated_tps(record)
+    ttft = ttft_sec(record)
+    per_token_ms = latency_ms_per_token(record)
+    metrics = record.get("metrics") or {}
     return {
         "label": label,
         "elapsed_sec": round(float(record.get("elapsed_sec") or 0), 3),
+        "ttft_sec": round(ttft, 3) if ttft is not None else "",
         "tokens": generation_tokens(record) or "",
         "estimated_tokens_per_sec": round(tps, 3) if tps is not None else "",
+        "latency_ms_per_token": round(per_token_ms, 1) if per_token_ms is not None else "",
+        "load_time_ms": metrics.get("load_time_ms", ""),
+        "prompt_eval_ms": metrics.get("prompt_eval_ms", ""),
+        "generation_eval_ms": metrics.get("generation_eval_ms", ""),
         "threads": threads(record) or "",
         "kv_cache": kv_cache(record.get("command", "")),
         "timestamp": record.get("timestamp", ""),
@@ -99,7 +119,15 @@ def parse_perf_stat(path):
 
 
 def markdown_table(rows):
-    headers = ["label", "elapsed_sec", "estimated_tokens_per_sec", "threads", "kv_cache"]
+    headers = [
+        "label",
+        "elapsed_sec",
+        "ttft_sec",
+        "estimated_tokens_per_sec",
+        "latency_ms_per_token",
+        "threads",
+        "kv_cache",
+    ]
     lines = [
         "| " + " | ".join(headers) + " |",
         "| " + " | ".join("---" for _ in headers) + " |",
@@ -121,7 +149,7 @@ def speedup(base, candidate):
 
 def build_report(rows, records, perf):
     lines = ["# Pi Oven Benchmark Analytics", ""]
-    lines.append("## Summary Table")
+    lines.append("## Ordered Summary Table")
     lines.append("")
     lines.append(markdown_table(rows))
     lines.append("")
@@ -135,6 +163,13 @@ def build_report(rows, records, perf):
             f"- Fastest successful run: `{fastest['label']}` at "
             f"{fastest['estimated_tokens_per_sec']} estimated tokens/sec."
         )
+        ttft_rows = [row for row in rows if row["ttft_sec"] != ""]
+        if ttft_rows:
+            best_ttft = min(ttft_rows, key=lambda row: float(row["ttft_sec"]))
+            lines.append(
+                f"- Lowest TTFT: `{best_ttft['label']}` at "
+                f"{best_ttft['ttft_sec']} seconds."
+            )
         lines.append(
             f"- Slowest successful run: `{slowest['label']}` at "
             f"{slowest['estimated_tokens_per_sec']} estimated tokens/sec."
@@ -174,9 +209,21 @@ def build_report(rows, records, perf):
 
     if perf:
         lines.append("")
-        lines.append("## perf stat")
+        lines.append("## Ordered perf stat")
         lines.append("")
-        for key, value in perf.items():
+        perf_order = [
+            "elapsed_sec",
+            "cpus_utilized",
+            "cpu_ghz",
+            "ipc",
+            "l1_miss_percent",
+            "user_sec",
+            "sys_sec",
+        ]
+        for key in perf_order:
+            if key not in perf:
+                continue
+            value = perf[key]
             lines.append(f"- `{key}`: `{value}`")
 
         ipc = perf.get("ipc")
@@ -210,6 +257,12 @@ def parse_args():
     parser.add_argument("--results", type=Path, default=ROOT / "results/benchmark_results.jsonl")
     parser.add_argument("--perf", type=Path, default=ROOT / "results/perf_stat.txt")
     parser.add_argument("--output-dir", type=Path, default=ROOT / "results/analytics")
+    parser.add_argument(
+        "--sort-by",
+        choices=["tps", "elapsed", "ttft", "label"],
+        default="tps",
+        help="Ordering for summary rows. tps sorts best first.",
+    )
     return parser.parse_args()
 
 
@@ -220,7 +273,14 @@ def main():
         raise SystemExit(f"No successful llama-cli rows found in {args.results}")
 
     rows = [row_for(label, record) for label, record in records.items()]
-    rows.sort(key=lambda row: row["label"])
+    if args.sort_by == "tps":
+        rows.sort(key=lambda row: float(row["estimated_tokens_per_sec"] or 0), reverse=True)
+    elif args.sort_by == "elapsed":
+        rows.sort(key=lambda row: float(row["elapsed_sec"] or 0))
+    elif args.sort_by == "ttft":
+        rows.sort(key=lambda row: float(row["ttft_sec"] or float("inf")))
+    else:
+        rows.sort(key=lambda row: row["label"])
     perf = parse_perf_stat(args.perf)
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
