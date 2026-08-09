@@ -36,15 +36,25 @@ def run_command(cmd, timeout):
 
 def parse_llama_timings(output):
     parsed = {}
-    patterns = {
-        "prompt_tokens_per_sec": r"prompt eval time.*?/\s*([0-9.]+)\s*tokens per second",
-        "generation_tokens_per_sec": r"eval time.*?/\s*([0-9.]+)\s*tokens per second",
-    }
-    for key, pattern in patterns.items():
-        matches = re.findall(pattern, output, flags=re.IGNORECASE)
-        if matches:
-            parsed[key] = float(matches[-1])
+    rate_pattern = re.compile(r"([0-9.]+)\s*(?:tokens per second|tok/s)", re.IGNORECASE)
+    for line in output.splitlines():
+        match = rate_pattern.search(line)
+        if not match:
+            continue
+        lower = line.lower()
+        if "prompt eval time" in lower:
+            parsed["prompt_tokens_per_sec"] = float(match.group(1))
+        elif "eval time" in lower:
+            parsed["generation_tokens_per_sec"] = float(match.group(1))
     return parsed
+
+
+def timing_lines(output):
+    return [
+        line
+        for line in output.splitlines()
+        if "eval time" in line.lower() or "tokens per second" in line.lower()
+    ]
 
 
 def append_result(path, record):
@@ -79,6 +89,7 @@ def benchmark_cli(args, label, extra_args, timeout=900):
         "machine": platform.machine(),
         "system": platform.platform(),
         "metrics": parse_llama_timings(result["output"]),
+        "timing_lines": timing_lines(result["output"]),
         "returncode": result["returncode"],
         "elapsed_sec": result["elapsed_sec"],
         "command": " ".join(cmd),
@@ -97,8 +108,6 @@ def benchmark_bench(args, label, extra_args, timeout=900):
         str(args.n_prompt),
         "-n",
         str(args.n_gen),
-        "-c",
-        str(args.ctx),
         "-t",
         str(args.threads),
         "-o",
