@@ -1,0 +1,5 @@
+label,workload,kv_cache,tokens,tokens_per_sec,latency_sec,threads,model,model_size_mb
+bench/f16,generation,"k=f16, v=f16",256,3.07956,83.128747,4,qwen2 1.5B Q4_K - Medium,1059.9
+bench/q8_kv,generation,"k=q8_0, v=q8_0",256,3.058964,83.688457,4,qwen2 1.5B Q4_K - Medium,1059.9
+bench/f16,prefill,"k=f16, v=f16",512,7.111643,71.994612,4,qwen2 1.5B Q4_K - Medium,1059.9
+bench/q8_kv,prefill,"k=q8_0, v=q8_0",512,6.81072,75.175609,4,qwen2 1.5B Q4_K - Medium,1059.9

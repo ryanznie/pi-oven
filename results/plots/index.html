@@ -5,14 +5,31 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Pi Oven Benchmark Analysis</title>
   <style>
-    body { max-width: 760px; margin: 48px auto; padding: 0 20px; font-family: system-ui, sans-serif; color: #171717; }
+    body { max-width: 900px; margin: 48px auto; padding: 0 20px; font-family: system-ui, sans-serif; color: #171717; }
+    h2 { margin-top: 2rem; }
     li { margin: 0.7rem 0; }
     .note { color: #57534e; line-height: 1.5; }
+    table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+    th, td { padding: 0.65rem; border-bottom: 1px solid #dedbd2; text-align: left; }
+    th { background: #fbfaf7; }
+    @media (max-width: 600px) { th, td { padding: 0.45rem; font-size: 0.86rem; } }
   </style>
 </head>
 <body>
   <h1>Pi Oven Benchmark Analysis</h1>
   <p class="note">Throughput charts use exact llama-bench measurements. CLI charts show wall time only because actual generated-token counts and TTFT were not captured.</p>
+  <p><strong>Recommendation:</strong> standard decoding with four threads is fastest. Two threads are nearly as fast and more CPU-efficient. F16 and Q8 KV are effectively tied for generation throughput; Q8's expected memory benefit was not measured.</p>
+  <h2>KV Cache Ranking</h2>
+  <table><thead><tr><th>Workload</th><th>Rank</th><th>KV type</th><th>Throughput</th><th>Relative to best</th></tr></thead>
+  <tbody><tr><td>Generation</td><td>1</td><td>f16</td><td>3.080 tok/s</td><td>1.000</td></tr><tr><td>Generation</td><td>2</td><td>q8_0</td><td>3.059 tok/s</td><td>0.993</td></tr><tr><td>Prefill</td><td>1</td><td>f16</td><td>7.112 tok/s</td><td>1.000</td></tr><tr><td>Prefill</td><td>2</td><td>q8_0</td><td>6.811 tok/s</td><td>0.958</td></tr></tbody></table>
+  <h2>Thread Ranking</h2>
+  <table><thead><tr><th>Rank</th><th>Threads</th><th>Wall time</th><th>Speedup vs 1</th></tr></thead>
+  <tbody><tr><td>1</td><td>4</td><td>96.317s</td><td>1.84x</td></tr><tr><td>2</td><td>2</td><td>98.422s</td><td>1.80x</td></tr><tr><td>3</td><td>1</td><td>177.005s</td><td>1.00x</td></tr></tbody></table>
+  <h2>Decoding Method</h2>
+  <table><thead><tr><th>Rank</th><th>Method</th><th>Wall time</th><th>Result</th></tr></thead>
+  <tbody><tr><td>1</td><td>Standard Q8</td><td>96.580s</td><td>Winner</td></tr>
+  <tr><td>2</td><td>Speculative</td><td>209.712s</td><td>2.17x slower</td></tr></tbody></table>
+  <h2>Detailed Charts</h2>
   <ul><li><a href="llama_bench_prefill_throughput.html">llama_bench_prefill_throughput</a> (<a href="llama_bench_prefill_throughput.svg">SVG</a>)</li><li><a href="llama_bench_generation_throughput.html">llama_bench_generation_throughput</a> (<a href="llama_bench_generation_throughput.svg">SVG</a>)</li><li><a href="cli_wall_time.html">cli_wall_time</a> (<a href="cli_wall_time.svg">SVG</a>)</li><li><a href="thread_scaling_wall_time.html">thread_scaling_wall_time</a> (<a href="thread_scaling_wall_time.svg">SVG</a>)</li><li><a href="speculative_wall_time.html">speculative_wall_time</a> (<a href="speculative_wall_time.svg">SVG</a>)</li><li><a href="perf_summary.html">perf_summary</a> (<a href="perf_summary.svg">SVG</a>)</li></ul>
 </body>
 </html>

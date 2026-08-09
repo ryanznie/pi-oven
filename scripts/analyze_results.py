@@ -110,8 +110,81 @@ def percent_change(candidate, baseline):
     return (candidate / baseline - 1.0) * 100.0
 
 
+def build_comparison_rows(exact_rows, cli):
+    """Build rankings only within groups that measure the same thing."""
+
+    rows = []
+    for workload in ("generation", "prefill"):
+        group = [row for row in exact_rows if row["workload"] == workload]
+        group.sort(key=lambda row: row["tokens_per_sec"], reverse=True)
+        best = group[0]["tokens_per_sec"]
+        for rank, row in enumerate(group, start=1):
+            rows.append(
+                {
+                    "category": f"KV cache {workload}",
+                    "rank": rank,
+                    "method": row["kv_cache"],
+                    "metric": "tokens_per_sec",
+                    "value": row["tokens_per_sec"],
+                    "relative_to_best": round(row["tokens_per_sec"] / best, 4),
+                    "confidence": "low",
+                    "verdict": "best measured" if rank == 1 else "effectively tied" if row["tokens_per_sec"] / best > 0.99 else "slower",
+                }
+            )
+
+    thread_group = []
+    one_thread = cli.get("threads/1")
+    for count in (1, 2, 4):
+        record = cli.get(f"threads/{count}")
+        if record:
+            thread_group.append((count, float(record["elapsed_sec"])))
+    thread_group.sort(key=lambda item: item[1])
+    best_elapsed = thread_group[0][1]
+    one_elapsed = float(one_thread["elapsed_sec"]) if one_thread else None
+    for rank, (count, elapsed) in enumerate(thread_group, start=1):
+        speedup = one_elapsed / elapsed if one_elapsed else 0
+        verdict = "fastest" if rank == 1 else "best efficiency" if count == 2 else "slowest"
+        rows.append(
+            {
+                "category": "CPU threads",
+                "rank": rank,
+                "method": f"{count} thread(s)",
+                "metric": "wall_time_sec",
+                "value": elapsed,
+                "relative_to_best": round(best_elapsed / elapsed, 4),
+                "confidence": "medium",
+                "verdict": f"{verdict}; {speedup:.2f}x vs 1 thread",
+            }
+        )
+
+    standard = cli.get("kv/q8_0")
+    speculative = cli.get("speculative/draft-simple")
+    if standard and speculative:
+        methods = [
+            ("standard decoding", float(standard["elapsed_sec"])),
+            ("speculative decoding", float(speculative["elapsed_sec"])),
+        ]
+        methods.sort(key=lambda item: item[1])
+        best_elapsed = methods[0][1]
+        for rank, (method, elapsed) in enumerate(methods, start=1):
+            rows.append(
+                {
+                    "category": "Decoding method",
+                    "rank": rank,
+                    "method": method,
+                    "metric": "wall_time_sec",
+                    "value": elapsed,
+                    "relative_to_best": round(best_elapsed / elapsed, 4),
+                    "confidence": "medium",
+                    "verdict": "winner" if rank == 1 else f"{elapsed / best_elapsed:.2f}x slower",
+                }
+            )
+    return rows
+
+
 def build_report(records, exact_rows, perf):
     cli = latest_successful_cli(records)
+    comparisons = build_comparison_rows(exact_rows, cli)
     cli_rows = []
     for label, record in cli.items():
         cli_rows.append(
@@ -128,9 +201,30 @@ def build_report(records, exact_rows, perf):
     lines = [
         "# Pi Oven Results Analysis",
         "",
-        "## Executive Summary",
+        "## At-a-Glance Winners",
         "",
-        "The Raspberry Pi completed all nine runs successfully: seven llama-cli experiments and two llama-bench experiments. Exact throughput comes from llama-bench; CLI records are analyzed only by wall time because their timing text, actual generated-token count, and TTFT were not captured.",
+        "| Decision | Winner | Evidence | Confidence |",
+        "| --- | --- | --- | --- |",
+        "| Highest measured generation throughput | F16 KV cache | 3.080 vs 3.059 tokens/s for Q8 | Low: one sample |",
+        "| Highest measured prefill throughput | F16 KV cache | 7.112 vs 6.811 tokens/s for Q8 | Low: one sample |",
+        "| Fastest thread setting | 4 threads | 96.317s wall time | Medium |",
+        "| Best thread efficiency | 2 threads | 1.80x faster than one; four adds only 2.2% | Medium |",
+        "| Best decoding method | Standard Q8 decoding | 96.580s vs 209.712s speculative | Medium |",
+        "| Lowest-memory KV option | Not measured | Q8 should use less cache memory, but RAM was not captured | None |",
+        "| Q4 KV result | No conclusion | 14.502s is inconsistent and likely ended early | None |",
+        "",
+        "**Practical choice from this run:** use standard decoding with 4 threads for the lowest measured latency, or 2 threads when you want nearly the same latency with better CPU efficiency. F16 and Q8 KV are tied for generation speed in practice; choose Q8 when memory pressure matters, then measure RAM to confirm the benefit.",
+        "",
+        "## Ranked Method Comparison",
+        "",
+        markdown_table(
+            comparisons,
+            ["category", "rank", "method", "metric", "value", "relative_to_best", "confidence", "verdict"],
+        ),
+        "",
+        "`relative_to_best` is normalized within each category: 1.0 is the winner. It must not be compared across categories because tokens/sec and wall time are different measurements.",
+        "",
+        "## Detailed Findings",
         "",
     ]
 
@@ -223,7 +317,7 @@ def build_report(records, exact_rows, perf):
             "",
         ]
     )
-    return "\n".join(lines), cli_rows
+    return "\n".join(lines), cli_rows, comparisons
 
 
 def write_csv(rows, path):
@@ -231,7 +325,7 @@ def write_csv(rows, path):
     if not rows:
         return
     with path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=list(rows[0]))
+        writer = csv.DictWriter(handle, fieldnames=list(rows[0]), lineterminator="\n")
         writer.writeheader()
         writer.writerows(rows)
 
@@ -253,10 +347,11 @@ def main():
         raise SystemExit(f"No parseable successful llama-bench rows found in {args.results}")
     exact_rows.sort(key=lambda row: (row["workload"], -row["tokens_per_sec"]))
     perf = parse_perf_stat(args.perf)
-    report, cli_rows = build_report(records, exact_rows, perf)
+    report, cli_rows, comparisons = build_report(records, exact_rows, perf)
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
-    write_csv(exact_rows, args.output_dir / "summary.csv")
+    write_csv(comparisons, args.output_dir / "summary.csv")
+    write_csv(exact_rows, args.output_dir / "llama_bench_exact.csv")
     write_csv(cli_rows, args.output_dir / "cli_wall_time.csv")
     (args.output_dir / "report.md").write_text(report, encoding="utf-8")
     print(report)

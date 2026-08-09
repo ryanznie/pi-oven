@@ -1,8 +1,36 @@
 # Pi Oven Results Analysis
 
-## Executive Summary
+## At-a-Glance Winners
 
-The Raspberry Pi completed all nine runs successfully: seven llama-cli experiments and two llama-bench experiments. Exact throughput comes from llama-bench; CLI records are analyzed only by wall time because their timing text, actual generated-token count, and TTFT were not captured.
+| Decision | Winner | Evidence | Confidence |
+| --- | --- | --- | --- |
+| Highest measured generation throughput | F16 KV cache | 3.080 vs 3.059 tokens/s for Q8 | Low: one sample |
+| Highest measured prefill throughput | F16 KV cache | 7.112 vs 6.811 tokens/s for Q8 | Low: one sample |
+| Fastest thread setting | 4 threads | 96.317s wall time | Medium |
+| Best thread efficiency | 2 threads | 1.80x faster than one; four adds only 2.2% | Medium |
+| Best decoding method | Standard Q8 decoding | 96.580s vs 209.712s speculative | Medium |
+| Lowest-memory KV option | Not measured | Q8 should use less cache memory, but RAM was not captured | None |
+| Q4 KV result | No conclusion | 14.502s is inconsistent and likely ended early | None |
+
+**Practical choice from this run:** use standard decoding with 4 threads for the lowest measured latency, or 2 threads when you want nearly the same latency with better CPU efficiency. F16 and Q8 KV are tied for generation speed in practice; choose Q8 when memory pressure matters, then measure RAM to confirm the benefit.
+
+## Ranked Method Comparison
+
+| category | rank | method | metric | value | relative_to_best | confidence | verdict |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| KV cache generation | 1 | k=f16, v=f16 | tokens_per_sec | 3.07956 | 1.0 | low | best measured |
+| KV cache generation | 2 | k=q8_0, v=q8_0 | tokens_per_sec | 3.058964 | 0.9933 | low | effectively tied |
+| KV cache prefill | 1 | k=f16, v=f16 | tokens_per_sec | 7.111643 | 1.0 | low | best measured |
+| KV cache prefill | 2 | k=q8_0, v=q8_0 | tokens_per_sec | 6.81072 | 0.9577 | low | slower |
+| CPU threads | 1 | 4 thread(s) | wall_time_sec | 96.317 | 1.0 | medium | fastest; 1.84x vs 1 thread |
+| CPU threads | 2 | 2 thread(s) | wall_time_sec | 98.422 | 0.9786 | medium | best efficiency; 1.80x vs 1 thread |
+| CPU threads | 3 | 1 thread(s) | wall_time_sec | 177.005 | 0.5441 | medium | slowest; 1.00x vs 1 thread |
+| Decoding method | 1 | standard decoding | wall_time_sec | 96.58 | 1.0 | medium | winner |
+| Decoding method | 2 | speculative decoding | wall_time_sec | 209.712 | 0.4605 | medium | 2.17x slower |
+
+`relative_to_best` is normalized within each category: 1.0 is the winner. It must not be compared across categories because tokens/sec and wall time are different measurements.
+
+## Detailed Findings
 
 - Prefill: F16 KV was fastest at **7.112 tokens/s**; Q8 KV reached 6.811 tokens/s (-4.23%).
 - Generation: F16 KV reached **3.080 tokens/s** and Q8 KV reached 3.059 tokens/s (-0.67%). The difference is negligible in this one-run sample.

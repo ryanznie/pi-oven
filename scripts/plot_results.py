@@ -163,7 +163,51 @@ def make_perf_chart(path, output_dir):
     return save_chart(chart, output_dir, "perf_summary")
 
 
-def write_index(paths, output_dir):
+def comparison_tables(cli, bench):
+    throughput_rows = []
+    for workload in ("generation", "prefill"):
+        group = sorted(
+            (row for row in bench if row["workload"] == workload),
+            key=lambda row: row["tokens_per_sec"],
+            reverse=True,
+        )
+        best = group[0]["tokens_per_sec"]
+        for rank, row in enumerate(group, start=1):
+            throughput_rows.append(
+                f"<tr><td>{workload.title()}</td><td>{rank}</td><td>{row['kv']}</td>"
+                f"<td>{row['tokens_per_sec']:.3f} tok/s</td>"
+                f"<td>{row['tokens_per_sec'] / best:.3f}</td></tr>"
+            )
+
+    thread_rows = []
+    thread_data = []
+    one_elapsed = float(cli["threads/1"]["elapsed_sec"])
+    for threads in (1, 2, 4):
+        elapsed = float(cli[f"threads/{threads}"]["elapsed_sec"])
+        thread_data.append((threads, elapsed))
+    for rank, (threads, elapsed) in enumerate(sorted(thread_data, key=lambda item: item[1]), start=1):
+        thread_rows.append(
+            f"<tr><td>{rank}</td><td>{threads}</td><td>{elapsed:.3f}s</td>"
+            f"<td>{one_elapsed / elapsed:.2f}x</td></tr>"
+        )
+
+    baseline = float(cli["kv/q8_0"]["elapsed_sec"])
+    speculative = float(cli["speculative/draft-simple"]["elapsed_sec"])
+    return f"""
+  <h2>KV Cache Ranking</h2>
+  <table><thead><tr><th>Workload</th><th>Rank</th><th>KV type</th><th>Throughput</th><th>Relative to best</th></tr></thead>
+  <tbody>{''.join(throughput_rows)}</tbody></table>
+  <h2>Thread Ranking</h2>
+  <table><thead><tr><th>Rank</th><th>Threads</th><th>Wall time</th><th>Speedup vs 1</th></tr></thead>
+  <tbody>{''.join(thread_rows)}</tbody></table>
+  <h2>Decoding Method</h2>
+  <table><thead><tr><th>Rank</th><th>Method</th><th>Wall time</th><th>Result</th></tr></thead>
+  <tbody><tr><td>1</td><td>Standard Q8</td><td>{baseline:.3f}s</td><td>Winner</td></tr>
+  <tr><td>2</td><td>Speculative</td><td>{speculative:.3f}s</td><td>{speculative / baseline:.2f}x slower</td></tr></tbody></table>
+"""
+
+
+def write_index(paths, output_dir, cli, bench):
     links = "".join(
         f'<li><a href="{html.name}">{html.stem}</a> (<a href="{svg.name}">SVG</a>)</li>'
         for html, svg in paths
@@ -175,14 +219,22 @@ def write_index(paths, output_dir):
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Pi Oven Benchmark Analysis</title>
   <style>
-    body {{ max-width: 760px; margin: 48px auto; padding: 0 20px; font-family: system-ui, sans-serif; color: #171717; }}
+    body {{ max-width: 900px; margin: 48px auto; padding: 0 20px; font-family: system-ui, sans-serif; color: #171717; }}
+    h2 {{ margin-top: 2rem; }}
     li {{ margin: 0.7rem 0; }}
     .note {{ color: #57534e; line-height: 1.5; }}
+    table {{ width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }}
+    th, td {{ padding: 0.65rem; border-bottom: 1px solid #dedbd2; text-align: left; }}
+    th {{ background: #fbfaf7; }}
+    @media (max-width: 600px) {{ th, td {{ padding: 0.45rem; font-size: 0.86rem; }} }}
   </style>
 </head>
 <body>
   <h1>Pi Oven Benchmark Analysis</h1>
   <p class="note">Throughput charts use exact llama-bench measurements. CLI charts show wall time only because actual generated-token counts and TTFT were not captured.</p>
+  <p><strong>Recommendation:</strong> standard decoding with four threads is fastest. Two threads are nearly as fast and more CPU-efficient. F16 and Q8 KV are effectively tied for generation throughput; Q8's expected memory benefit was not measured.</p>
+  {comparison_tables(cli, bench).strip()}
+  <h2>Detailed Charts</h2>
   <ul>{links}</ul>
 </body>
 </html>
@@ -223,7 +275,7 @@ def main():
         ]
         if output is not None
     )
-    index = write_index(outputs, args.output_dir)
+    index = write_index(outputs, args.output_dir, cli, bench)
     print(f"Wrote {index}")
     for html, svg in outputs:
         print(f"Wrote {html}")
