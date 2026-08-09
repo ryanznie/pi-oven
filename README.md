@@ -36,18 +36,22 @@ Run a smoke test:
 
 ## Run Benchmarks
 
-Run the full simple benchmark suite:
+Run the full long benchmark suite:
 
 ```bash
 python3 benchmarks/run_benchmarks.py
 ```
+
+By default this uses `512` prompt tokens, `256` generated tokens, runs
+`llama-bench`, KV-cache tests, thread tests, and speculative decoding, and gives
+each individual run up to `2400` seconds.
 
 Results are written to `results/benchmark_results.jsonl`.
 
 Useful variants:
 
 ```bash
-# Compare fewer settings while iterating. This skips llama-bench and speculative decoding.
+# Fast debug run. This skips llama-bench and speculative decoding.
 python3 benchmarks/run_benchmarks.py --quick --skip-speculative
 
 # Use a different llama.cpp build or model directory.
@@ -65,10 +69,10 @@ python3 benchmarks/run_benchmarks.py --suite bench --timeout 300
 python3 benchmarks/run_benchmarks.py --suite speculative
 ```
 
-The script prints each experiment before it starts. On a Raspberry Pi 4, a
-single 64-token `llama-cli` run may take 30-90 seconds. `llama-bench` and
-speculative decoding can be slower, so quick mode skips `llama-bench` by
-default unless `--include-bench` or `--suite bench` is used.
+The script prints each experiment before it starts. On a Raspberry Pi 4, the
+default full run can take a long time. Quick mode keeps generated tokens low and
+skips `llama-bench` by default unless `--include-bench` or `--suite bench` is
+used.
 
 ## CPU Profiling
 

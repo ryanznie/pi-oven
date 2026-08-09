@@ -243,14 +243,14 @@ def parse_args():
     parser.add_argument("--output", type=Path, default=ROOT / "results/benchmark_results.jsonl")
     parser.add_argument("--threads", type=int, default=int(os.environ.get("THREADS", "4")))
     parser.add_argument("--ctx", type=int, default=2048)
-    parser.add_argument("--n-prompt", type=int, default=256)
-    parser.add_argument("--n-gen", type=int, default=128)
+    parser.add_argument("--n-prompt", type=int, default=512)
+    parser.add_argument("--n-gen", type=int, default=256)
     parser.add_argument("--suite", choices=["all", "bench", "kv", "threads", "speculative"], default="all")
     parser.add_argument("--quick", action="store_true")
     parser.add_argument("--skip-bench", action="store_true", help="Skip llama-bench runs.")
     parser.add_argument("--include-bench", action="store_true", help="Include llama-bench even in --quick mode.")
     parser.add_argument("--skip-speculative", action="store_true", help="Skip the slow draft-model run.")
-    parser.add_argument("--timeout", type=int, default=900, help="Seconds before a single run is marked timed out.")
+    parser.add_argument("--timeout", type=int, default=2400, help="Seconds before a single run is marked timed out.")
     return parser.parse_args()
 
 
