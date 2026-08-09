@@ -12,4 +12,6 @@ THREADS="${THREADS:-4}"
   -n 96 \
   -c 1024 \
   -t "${THREADS}" \
+  --no-conversation \
+  --single-turn \
   --show-timings

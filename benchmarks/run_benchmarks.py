@@ -65,6 +65,8 @@ def benchmark_cli(args, label, extra_args, timeout=900):
         "-t",
         str(args.threads),
         "--no-display-prompt",
+        "--no-conversation",
+        "--single-turn",
         "--show-timings",
     ] + extra_args
 

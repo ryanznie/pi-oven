@@ -13,6 +13,8 @@ perf stat -d \
   -n 128 \
   -c 2048 \
   -t "${THREADS}" \
+  --no-conversation \
+  --single-turn \
   --cache-type-k q8_0 \
   --cache-type-v q8_0 \
   --show-timings
