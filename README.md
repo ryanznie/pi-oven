@@ -47,7 +47,7 @@ Results are written to `results/benchmark_results.jsonl`.
 Useful variants:
 
 ```bash
-# Compare fewer settings while iterating.
+# Compare fewer settings while iterating. This skips llama-bench and speculative decoding.
 python3 benchmarks/run_benchmarks.py --quick --skip-speculative
 
 # Use a different llama.cpp build or model directory.
@@ -58,13 +58,17 @@ python3 benchmarks/run_benchmarks.py \
 # Run only KV-cache experiments.
 python3 benchmarks/run_benchmarks.py --suite kv
 
+# Run llama-bench explicitly. This can be slow on Raspberry Pi.
+python3 benchmarks/run_benchmarks.py --suite bench --timeout 300
+
 # Run speculative decoding experiments too.
 python3 benchmarks/run_benchmarks.py --suite speculative
 ```
 
 The script prints each experiment before it starts. On a Raspberry Pi 4, a
-single 64-token run may take 30-90 seconds, and speculative decoding was slower
-than baseline in the first sample run.
+single 64-token `llama-cli` run may take 30-90 seconds. `llama-bench` and
+speculative decoding can be slower, so quick mode skips `llama-bench` by
+default unless `--include-bench` or `--suite bench` is used.
 
 ## CPU Profiling
 

@@ -194,6 +194,10 @@ def benchmark_bench(args, label, extra_args, timeout=900):
         str(args.llama_bin / "llama-bench"),
         "-m",
         str(args.target_model),
+        "-r",
+        "1",
+        "--no-warmup",
+        "--progress",
         "-p",
         str(args.n_prompt),
         "-n",
@@ -244,6 +248,7 @@ def parse_args():
     parser.add_argument("--suite", choices=["all", "bench", "kv", "threads", "speculative"], default="all")
     parser.add_argument("--quick", action="store_true")
     parser.add_argument("--skip-bench", action="store_true", help="Skip llama-bench runs.")
+    parser.add_argument("--include-bench", action="store_true", help="Include llama-bench even in --quick mode.")
     parser.add_argument("--skip-speculative", action="store_true", help="Skip the slow draft-model run.")
     parser.add_argument("--timeout", type=int, default=900, help="Seconds before a single run is marked timed out.")
     return parser.parse_args()
@@ -261,6 +266,9 @@ def main():
     if args.quick:
         args.n_prompt = min(args.n_prompt, 128)
         args.n_gen = min(args.n_gen, 64)
+        if args.suite == "all" and not args.include_bench:
+            args.skip_bench = True
+            print("Quick mode skips llama-bench by default; use --include-bench or --suite bench to run it.", flush=True)
 
     if args.suite in ("all", "bench") and not args.skip_bench:
         benchmark_bench(args, "bench/f16", [], timeout=args.timeout)
