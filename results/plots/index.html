@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pi Oven Benchmark Analysis</title>
+  <style>
+    body { max-width: 760px; margin: 48px auto; padding: 0 20px; font-family: system-ui, sans-serif; color: #171717; }
+    li { margin: 0.7rem 0; }
+    .note { color: #57534e; line-height: 1.5; }
+  </style>
+</head>
+<body>
+  <h1>Pi Oven Benchmark Analysis</h1>
+  <p class="note">Throughput charts use exact llama-bench measurements. CLI charts show wall time only because actual generated-token counts and TTFT were not captured.</p>
+  <ul><li><a href="llama_bench_prefill_throughput.html">llama_bench_prefill_throughput</a> (<a href="llama_bench_prefill_throughput.svg">SVG</a>)</li><li><a href="llama_bench_generation_throughput.html">llama_bench_generation_throughput</a> (<a href="llama_bench_generation_throughput.svg">SVG</a>)</li><li><a href="cli_wall_time.html">cli_wall_time</a> (<a href="cli_wall_time.svg">SVG</a>)</li><li><a href="thread_scaling_wall_time.html">thread_scaling_wall_time</a> (<a href="thread_scaling_wall_time.svg">SVG</a>)</li><li><a href="speculative_wall_time.html">speculative_wall_time</a> (<a href="speculative_wall_time.svg">SVG</a>)</li><li><a href="perf_summary.html">perf_summary</a> (<a href="perf_summary.svg">SVG</a>)</li></ul>
+</body>
+</html>

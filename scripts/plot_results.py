@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+"""Render accuracy-first benchmark plots with Reflex XY."""
+
 import argparse
 import json
 import re
@@ -8,67 +10,50 @@ import xy
 
 
 ROOT = Path(__file__).resolve().parents[1]
-
-
 THEME = xy.theme(
     background="#ffffff",
     plot_background="#fbfaf7",
     grid_color="#dedbd2",
     axis_color="#77736a",
     text_color="#171717",
-    palette=["#2563eb", "#16a34a", "#f59e0b", "#dc2626", "#7c3aed", "#0891b2"],
+    palette=["#2563eb", "#16a34a", "#f59e0b", "#dc2626", "#7c3aed"],
 )
 
 
 def load_jsonl(path):
-    records = []
     with path.open(encoding="utf-8") as handle:
-        for line in handle:
-            line = line.strip()
-            if line:
-                records.append(json.loads(line))
-    return records
+        return [json.loads(line) for line in handle if line.strip()]
 
 
-def command_arg(command, flag):
-    parts = command.split()
-    for index, part in enumerate(parts):
-        if part == flag and index + 1 < len(parts):
-            return parts[index + 1]
-    return None
-
-
-def estimate_tokens_per_second(record):
-    metrics = record.get("metrics") or {}
-    if "generation_tokens_per_sec" in metrics:
-        return float(metrics["generation_tokens_per_sec"])
-
-    n_gen = command_arg(record.get("command", ""), "-n")
-    if not n_gen:
-        return None
-
-    elapsed = float(record.get("elapsed_sec") or 0)
-    if elapsed <= 0:
-        return None
-    return float(n_gen) / elapsed
-
-
-def ttft_sec(record):
-    value = record.get("ttft_sec")
-    return float(value) if value is not None else None
-
-
-def latest_success_by_label(records):
+def latest_cli(records):
     latest = {}
     for record in records:
-        if record.get("returncode") != 0:
-            continue
-        if record.get("suite") != "cli":
-            continue
-        label = record.get("label")
-        if label:
-            latest[label] = record
+        if record.get("suite") == "cli" and record.get("returncode") == 0:
+            latest[record["label"]] = record
     return latest
+
+
+def extract_bench_rows(records):
+    decoder = json.JSONDecoder()
+    rows = []
+    for record in records:
+        if record.get("suite") != "llama-bench" or record.get("returncode") != 0:
+            continue
+        raw = record.get("raw_output", "")
+        for match in re.finditer(r'\{\s*"build_commit"', raw):
+            try:
+                result, _ = decoder.raw_decode(raw[match.start() :])
+            except json.JSONDecodeError:
+                continue
+            workload = "prefill" if int(result.get("n_prompt", 0)) else "generation"
+            rows.append(
+                {
+                    "workload": workload,
+                    "kv": str(result["type_k"]),
+                    "tokens_per_sec": float(result["avg_ts"]),
+                }
+            )
+    return rows
 
 
 def save_chart(chart, output_dir, stem):
@@ -79,188 +64,131 @@ def save_chart(chart, output_dir, stem):
     return html_path, svg_path
 
 
-def make_elapsed_chart(records, output_dir):
+def make_bench_chart(rows, workload, output_dir):
+    selected = [row for row in rows if row["workload"] == workload]
+    selected.sort(key=lambda row: row["tokens_per_sec"], reverse=True)
+    labels = [row["kv"] for row in selected]
+    values = [row["tokens_per_sec"] for row in selected]
+    title_word = "Prefill" if workload == "prefill" else "Generation"
+    chart = xy.bar_chart(
+        xy.bar(labels, values, color="#16a34a", corner_radius=4),
+        xy.x_axis(label="KV cache data type"),
+        xy.y_axis(label="Tokens per second"),
+        THEME,
+        title=f"Exact llama-bench {title_word} Throughput (higher is better)",
+    )
+    return save_chart(chart, output_dir, f"llama_bench_{workload}_throughput")
+
+
+def make_cli_elapsed_chart(records, output_dir):
     labels = list(records)
-    elapsed = [float(records[label]["elapsed_sec"]) for label in labels]
+    values = [float(records[label]["elapsed_sec"]) for label in labels]
     chart = xy.bar_chart(
-        xy.bar(labels, elapsed, color="#2563eb", corner_radius=4),
+        xy.bar(labels, values, color="#2563eb", corner_radius=4),
         xy.x_axis(label="Experiment"),
-        xy.y_axis(label="Elapsed seconds"),
+        xy.y_axis(label="Wall time (seconds)"),
         THEME,
-        title="Benchmark Elapsed Time (seconds, lower is better)",
+        title="llama-cli Capped-Run Wall Time (actual token count unavailable)",
     )
-    return save_chart(chart, output_dir, "elapsed_seconds")
-
-
-def make_throughput_chart(records, output_dir):
-    labels = []
-    rates = []
-    for label, record in records.items():
-        rate = estimate_tokens_per_second(record)
-        if rate is None:
-            continue
-        labels.append(label)
-        rates.append(rate)
-
-    chart = xy.bar_chart(
-        xy.bar(labels, rates, color="#16a34a", corner_radius=4),
-        xy.x_axis(label="Experiment"),
-        xy.y_axis(label="Estimated tokens/sec"),
-        THEME,
-        title="Estimated Generation Throughput (tokens/sec, higher is better)",
-    )
-    return save_chart(chart, output_dir, "estimated_tokens_per_second")
+    return save_chart(chart, output_dir, "cli_wall_time")
 
 
 def make_threads_chart(records, output_dir):
     points = []
     for label, record in records.items():
         match = re.fullmatch(r"threads/(\d+)", label)
-        if not match:
-            continue
-        rate = estimate_tokens_per_second(record)
-        if rate is not None:
-            points.append((int(match.group(1)), rate))
-
+        if match:
+            points.append((int(match.group(1)), float(record["elapsed_sec"])))
     points.sort()
-    if not points:
-        return None
-
-    x_values = [threads for threads, _ in points]
-    y_values = [rate for _, rate in points]
     chart = xy.line_chart(
-        xy.line(x_values, y_values, color="#7c3aed", width=3),
-        xy.scatter(x_values, y_values, color="#7c3aed", size=42),
-        xy.x_axis(label="Threads"),
-        xy.y_axis(label="Estimated tokens/sec"),
+        xy.line([x for x, _ in points], [y for _, y in points], color="#7c3aed", width=3),
+        xy.scatter([x for x, _ in points], [y for _, y in points], color="#7c3aed", size=42),
+        xy.x_axis(label="CPU threads"),
+        xy.y_axis(label="Wall time (seconds)"),
         THEME,
-        title="Thread Scaling (threads vs estimated tokens/sec)",
+        title="Thread Scaling Wall Time (lower is better)",
     )
-    return save_chart(chart, output_dir, "thread_scaling")
+    return save_chart(chart, output_dir, "thread_scaling_wall_time")
 
 
-def make_ttft_chart(records, output_dir):
-    labels = []
-    values = []
-    for label, record in records.items():
-        ttft = ttft_sec(record)
-        if ttft is None:
-            continue
-        labels.append(label)
-        values.append(ttft)
-
-    if not values:
+def make_speculative_chart(records, output_dir):
+    baseline = records.get("kv/q8_0")
+    speculative = records.get("speculative/draft-simple")
+    if not baseline or not speculative:
         return None
-
     chart = xy.bar_chart(
-        xy.bar(labels, values, color="#dc2626", corner_radius=4),
-        xy.x_axis(label="Experiment"),
-        xy.y_axis(label="TTFT seconds"),
+        xy.bar(
+            ["Q8 baseline", "Speculative"],
+            [float(baseline["elapsed_sec"]), float(speculative["elapsed_sec"])],
+            color="#dc2626",
+            corner_radius=4,
+        ),
+        xy.x_axis(label="Decoding method"),
+        xy.y_axis(label="Wall time (seconds)"),
         THEME,
-        title="Time To First Token (seconds, lower is better)",
+        title="Speculative Decoding Wall Time (lower is better)",
     )
-    return save_chart(chart, output_dir, "ttft_seconds")
+    return save_chart(chart, output_dir, "speculative_wall_time")
 
 
 def parse_perf_stat(path):
+    if not path.exists():
+        return {}
     text = path.read_text(encoding="utf-8")
-    fields = {}
-
     patterns = {
-        "CPUs utilized": r"#\s+([0-9.]+)\s+CPUs utilized",
+        "CPU cores used": r"#\s+([0-9.]+)\s+CPUs utilized",
         "IPC": r"#\s+([0-9.]+)\s+insn per cycle",
         "CPU GHz": r"#\s+([0-9.]+)\s+GHz",
         "L1 miss %": r"#\s+([0-9.]+)% of all L1-dcache accesses",
     }
+    fields = {}
     for label, pattern in patterns.items():
         match = re.search(pattern, text)
         if match:
             fields[label] = float(match.group(1))
-
-    elapsed_match = re.search(r"([0-9.]+)\s+seconds time elapsed", text)
-    if elapsed_match:
-        fields["Elapsed sec"] = float(elapsed_match.group(1))
-
     return fields
 
 
-def make_perf_chart(perf_path, output_dir):
-    if not perf_path.exists():
-        return None
-
-    fields = parse_perf_stat(perf_path)
+def make_perf_chart(path, output_dir):
+    fields = parse_perf_stat(path)
     if not fields:
         return None
-
-    labels = list(fields)
-    values = [fields[label] for label in labels]
     chart = xy.bar_chart(
-        xy.bar(labels, values, color="#f59e0b", corner_radius=4),
+        xy.bar(list(fields), list(fields.values()), color="#f59e0b", corner_radius=4),
         xy.x_axis(label="perf stat metric"),
-        xy.y_axis(label="Value"),
+        xy.y_axis(label="Reported value"),
         THEME,
-        title="perf stat Summary",
+        title="CPU Profile Summary (metrics use different units)",
     )
     return save_chart(chart, output_dir, "perf_summary")
 
 
-def make_speedup_chart(records, output_dir):
-    baseline = records.get("kv/q8_0") or records.get("threads/4")
-    if baseline is None:
-        return None
-
-    baseline_elapsed = float(baseline.get("elapsed_sec") or 0)
-    if baseline_elapsed <= 0:
-        return None
-
-    labels = []
-    speedups = []
-    for label, record in records.items():
-        elapsed = float(record.get("elapsed_sec") or 0)
-        if elapsed <= 0:
-            continue
-        labels.append(label)
-        speedups.append(baseline_elapsed / elapsed)
-
-    chart = xy.bar_chart(
-        xy.bar(labels, speedups, color="#0891b2", corner_radius=4),
-        xy.x_axis(label="Experiment"),
-        xy.y_axis(label="Speedup vs kv/q8_0 baseline"),
-        THEME,
-        title="Relative Speed (1.0 = q8 KV baseline)",
-    )
-    return save_chart(chart, output_dir, "relative_speedup")
-
-
 def write_index(paths, output_dir):
-    links = []
-    for html_path, svg_path in paths:
-        links.append(
-            f'<li><a href="{html_path.name}">{html_path.stem}</a> '
-            f'(<a href="{svg_path.name}">svg</a>)</li>'
-        )
-
-    index = f"""<!doctype html>
+    links = "".join(
+        f'<li><a href="{html.name}">{html.stem}</a> (<a href="{svg.name}">SVG</a>)</li>'
+        for html, svg in paths
+    )
+    page = f"""<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Pi Oven Benchmark Plots</title>
+  <title>Pi Oven Benchmark Analysis</title>
   <style>
-    body {{ font-family: system-ui, sans-serif; margin: 40px; color: #171717; }}
-    li {{ margin: 0.5rem 0; }}
+    body {{ max-width: 760px; margin: 48px auto; padding: 0 20px; font-family: system-ui, sans-serif; color: #171717; }}
+    li {{ margin: 0.7rem 0; }}
+    .note {{ color: #57534e; line-height: 1.5; }}
   </style>
 </head>
 <body>
-  <h1>Pi Oven Benchmark Plots</h1>
-  <ul>
-    {"".join(links)}
-  </ul>
+  <h1>Pi Oven Benchmark Analysis</h1>
+  <p class="note">Throughput charts use exact llama-bench measurements. CLI charts show wall time only because actual generated-token counts and TTFT were not captured.</p>
+  <ul>{links}</ul>
 </body>
 </html>
 """
     path = output_dir / "index.html"
-    path.write_text(index, encoding="utf-8")
+    path.write_text(page, encoding="utf-8")
     return path
 
 
@@ -275,29 +203,31 @@ def parse_args():
 def main():
     args = parse_args()
     args.output_dir.mkdir(parents=True, exist_ok=True)
-
-    records = latest_success_by_label(load_jsonl(args.results))
-    if not records:
-        raise SystemExit(f"No successful llama-cli rows found in {args.results}")
+    records = load_jsonl(args.results)
+    cli = latest_cli(records)
+    bench = extract_bench_rows(records)
+    if not cli or not bench:
+        raise SystemExit("Need successful llama-cli and parseable llama-bench results")
 
     outputs = [
-        make_elapsed_chart(records, args.output_dir),
-        make_throughput_chart(records, args.output_dir),
+        make_bench_chart(bench, "prefill", args.output_dir),
+        make_bench_chart(bench, "generation", args.output_dir),
+        make_cli_elapsed_chart(cli, args.output_dir),
+        make_threads_chart(cli, args.output_dir),
     ]
-
-    optional_outputs = [
-        make_ttft_chart(records, args.output_dir),
-        make_threads_chart(records, args.output_dir),
-        make_speedup_chart(records, args.output_dir),
-        make_perf_chart(args.perf, args.output_dir),
-    ]
-    outputs.extend(output for output in optional_outputs if output is not None)
-
+    outputs.extend(
+        output
+        for output in [
+            make_speculative_chart(cli, args.output_dir),
+            make_perf_chart(args.perf, args.output_dir),
+        ]
+        if output is not None
+    )
     index = write_index(outputs, args.output_dir)
     print(f"Wrote {index}")
-    for html_path, svg_path in outputs:
-        print(f"Wrote {html_path}")
-        print(f"Wrote {svg_path}")
+    for html, svg in outputs:
+        print(f"Wrote {html}")
+        print(f"Wrote {svg}")
 
 
 if __name__ == "__main__":

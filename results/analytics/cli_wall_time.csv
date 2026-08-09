@@ -1,0 +1,8 @@
+label,elapsed_sec,threads,kv_cache,requested_max_tokens
+kv/q4_0,14.502,4,"k=q4_0, v=q4_0",256
+threads/4,96.317,4,"k=q8_0, v=q8_0",256
+kv/q8_0,96.58,4,"k=q8_0, v=q8_0",256
+kv/f16,97.229,4,"k=f16, v=f16",256
+threads/2,98.422,2,"k=q8_0, v=q8_0",256
+threads/1,177.005,1,"k=q8_0, v=q8_0",256
+speculative/draft-simple,209.712,4,"k=q8_0, v=q8_0",256
