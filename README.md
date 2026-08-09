@@ -48,7 +48,7 @@ Useful variants:
 
 ```bash
 # Compare fewer settings while iterating.
-python3 benchmarks/run_benchmarks.py --quick
+python3 benchmarks/run_benchmarks.py --quick --skip-speculative
 
 # Use a different llama.cpp build or model directory.
 python3 benchmarks/run_benchmarks.py \
@@ -61,6 +61,10 @@ python3 benchmarks/run_benchmarks.py --suite kv
 # Run speculative decoding experiments too.
 python3 benchmarks/run_benchmarks.py --suite speculative
 ```
+
+The script prints each experiment before it starts. On a Raspberry Pi 4, a
+single 64-token run may take 30-90 seconds, and speculative decoding was slower
+than baseline in the first sample run.
 
 ## CPU Profiling
 
@@ -76,6 +80,19 @@ For a sampled profile:
 ./scripts/perf_record.sh
 perf report
 ```
+
+## Plot Results
+
+Install the plotting dependency and render the benchmark plots:
+
+```bash
+python3 -m venv .venv
+.venv/bin/python -m pip install -r requirements.txt
+.venv/bin/python scripts/plot_results.py
+```
+
+The script uses `xy` and writes interactive HTML plus SVG exports to
+`results/plots/`.
 
 If the Pi denies access to hardware counters, temporarily relax perf paranoia:
 
