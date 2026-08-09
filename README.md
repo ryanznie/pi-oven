@@ -4,6 +4,12 @@ Small Raspberry Pi 5 project for benchmarking local LLM inference with
 `llama.cpp`, GGUF Qwen models, KV-cache settings, speculative decoding, and
 Linux `perf`.
 
+The repo now has two tracks:
+
+- `llama.cpp` benchmarking: measure existing optimized inference features.
+- `TinyServe`: implement small Python + PyTorch inference loops ourselves for
+  learning.
+
 This intentionally avoids 3B models. The default target is
 `Qwen2.5-1.5B-Instruct-GGUF:Q4_K_M`; the draft model for speculative decoding is
 `Qwen2.5-0.5B-Instruct-GGUF:Q4_K_M`.
@@ -33,6 +39,22 @@ Run a smoke test:
 ```bash
 ./scripts/smoke_test.sh
 ```
+
+## TinyServe Learning Engine
+
+TinyServe is the from-scratch learning path. Phase 1 contains a visible,
+greedy autoregressive loop that intentionally disables the KV cache:
+
+```bash
+python3 -m venv .venv-tinyserve
+.venv-tinyserve/bin/python -m pip install -r tinyserve/requirements.txt
+.venv-tinyserve/bin/python -m tinyserve.benchmark --max-new-tokens 4 --threads 4
+```
+
+See [`tinyserve/README.md`](tinyserve/README.md) for the concept, expected
+output, a longer run, and Raspberry Pi `perf` commands. TinyServe records a
+comparison-friendly CSV now; a unified same-model comparison with llama.cpp
+will be added after the learning implementations are in place.
 
 ## Run Benchmarks
 
