@@ -17,9 +17,9 @@ DEFAULT_PROMPT = (
 )
 
 
-def run_command(cmd, timeout, measure_ttft=False):
-    if measure_ttft:
-        return run_streaming_command(cmd, timeout)
+def run_command(cmd, timeout, measure_ttft=False, echo_output=False):
+    if measure_ttft or echo_output:
+        return run_streaming_command(cmd, timeout, measure_ttft=measure_ttft, echo_output=echo_output)
 
     started = time.time()
     try:
@@ -48,7 +48,7 @@ def run_command(cmd, timeout, measure_ttft=False):
     }
 
 
-def run_streaming_command(cmd, timeout):
+def run_streaming_command(cmd, timeout, measure_ttft=False, echo_output=False):
     started = time.time()
     output_chunks = []
     ttft_sec = None
@@ -83,7 +83,9 @@ def run_streaming_command(cmd, timeout):
             stream_name = key.data
             text = chunk.decode("utf-8", errors="replace")
             output_chunks.append(text)
-            if stream_name == "stdout" and ttft_sec is None and text.strip():
+            if echo_output:
+                print(text, end="", flush=True)
+            if measure_ttft and stream_name == "stdout" and ttft_sec is None and text.strip():
                 ttft_sec = round(time.time() - started, 3)
 
     try:
@@ -103,7 +105,7 @@ def run_streaming_command(cmd, timeout):
         "elapsed_sec": round(time.time() - started, 3),
         "output": output,
         "timed_out": timed_out,
-        "ttft_sec": ttft_sec,
+        "ttft_sec": ttft_sec if measure_ttft else None,
     }
 
 
@@ -209,7 +211,7 @@ def benchmark_bench(args, label, extra_args, timeout=900):
     ] + extra_args
 
     print(f"\n==> Running {label} with llama-bench", flush=True)
-    result = run_command(cmd, timeout=timeout)
+    result = run_command(cmd, timeout=timeout, echo_output=True)
     record = {
         "label": label,
         "suite": "llama-bench",
@@ -251,6 +253,7 @@ def parse_args():
     parser.add_argument("--include-bench", action="store_true", help="Include llama-bench even in --quick mode.")
     parser.add_argument("--skip-speculative", action="store_true", help="Skip the slow draft-model run.")
     parser.add_argument("--timeout", type=int, default=2400, help="Seconds before a single run is marked timed out.")
+    parser.add_argument("--bench-timeout", type=int, default=300, help="Seconds before a llama-bench run is marked timed out.")
     return parser.parse_args()
 
 
@@ -269,10 +272,6 @@ def main():
         if args.suite == "all" and not args.include_bench:
             args.skip_bench = True
             print("Quick mode skips llama-bench by default; use --include-bench or --suite bench to run it.", flush=True)
-
-    if args.suite in ("all", "bench") and not args.skip_bench:
-        benchmark_bench(args, "bench/f16", [], timeout=args.timeout)
-        benchmark_bench(args, "bench/q8_kv", ["-ctk", "q8_0", "-ctv", "q8_0"], timeout=args.timeout)
 
     if args.suite in ("all", "kv"):
         kv_types = ["f16", "q8_0"] if args.quick else ["f16", "q8_0", "q4_0"]
@@ -319,6 +318,11 @@ def main():
             ],
             timeout=max(args.timeout, 1200),
         )
+
+    if args.suite in ("all", "bench") and not args.skip_bench:
+        print("Running llama-bench last so cli/KV/thread/speculative results are saved first.", flush=True)
+        benchmark_bench(args, "bench/f16", [], timeout=args.bench_timeout)
+        benchmark_bench(args, "bench/q8_kv", ["-ctk", "q8_0", "-ctv", "q8_0"], timeout=args.bench_timeout)
 
 
 if __name__ == "__main__":

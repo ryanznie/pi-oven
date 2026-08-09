@@ -42,9 +42,10 @@ Run the full long benchmark suite:
 python3 benchmarks/run_benchmarks.py
 ```
 
-By default this uses `512` prompt tokens, `256` generated tokens, runs
-`llama-bench`, KV-cache tests, thread tests, and speculative decoding, and gives
-each individual run up to `2400` seconds.
+By default this uses `512` prompt tokens, `256` generated tokens, runs KV-cache
+tests, thread tests, speculative decoding, then `llama-bench` last. Regular
+`llama-cli` runs get up to `2400` seconds each; `llama-bench` gets `300`
+seconds each by default.
 
 Results are written to `results/benchmark_results.jsonl`.
 
@@ -70,9 +71,10 @@ python3 benchmarks/run_benchmarks.py --suite speculative
 ```
 
 The script prints each experiment before it starts. On a Raspberry Pi 4, the
-default full run can take a long time. Quick mode keeps generated tokens low and
-skips `llama-bench` by default unless `--include-bench` or `--suite bench` is
-used.
+default full run can take a long time. `llama-bench` runs last and streams its
+own output live; if it still stalls, the earlier `llama-cli` results are already
+saved. Quick mode keeps generated tokens low and skips `llama-bench` by default
+unless `--include-bench` or `--suite bench` is used.
 
 ## CPU Profiling
 
