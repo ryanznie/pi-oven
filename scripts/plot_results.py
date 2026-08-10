@@ -212,6 +212,11 @@ def write_index(paths, output_dir, cli, bench):
         f'<li><a href="{html.name}">{html.stem}</a> (<a href="{svg.name}">SVG</a>)</li>'
         for html, svg in paths
     )
+    figures = "".join(
+        f'<figure><a href="{html.name}"><img src="{svg.name}" alt="{html.stem.replace("_", " ")}"></a>'
+        f'<figcaption>{html.stem.replace("_", " ").title()}</figcaption></figure>'
+        for html, svg in paths
+    )
     page = f"""<!doctype html>
 <html lang="en">
 <head>
@@ -226,7 +231,14 @@ def write_index(paths, output_dir, cli, bench):
     table {{ width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }}
     th, td {{ padding: 0.65rem; border-bottom: 1px solid #dedbd2; text-align: left; }}
     th {{ background: #fbfaf7; }}
-    @media (max-width: 600px) {{ th, td {{ padding: 0.45rem; font-size: 0.86rem; }} }}
+    .charts {{ display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.5rem; }}
+    figure {{ margin: 0; }}
+    figure img {{ display: block; width: 100%; height: auto; border: 1px solid #dedbd2; }}
+    figcaption {{ margin-top: 0.45rem; color: #57534e; font-size: 0.9rem; }}
+    @media (max-width: 700px) {{
+      th, td {{ padding: 0.45rem; font-size: 0.86rem; }}
+      .charts {{ grid-template-columns: 1fr; }}
+    }}
   </style>
 </head>
 <body>
@@ -235,6 +247,8 @@ def write_index(paths, output_dir, cli, bench):
   <p><strong>Recommendation:</strong> standard decoding with four threads is fastest. Two threads are nearly as fast and more CPU-efficient. F16 and Q8 KV are effectively tied for generation throughput; Q8's expected memory benefit was not measured.</p>
   {comparison_tables(cli, bench).strip()}
   <h2>Detailed Charts</h2>
+  <div class="charts">{figures}</div>
+  <h2>Chart Files</h2>
   <ul>{links}</ul>
 </body>
 </html>

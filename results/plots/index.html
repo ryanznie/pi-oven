@@ -12,7 +12,14 @@
     table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
     th, td { padding: 0.65rem; border-bottom: 1px solid #dedbd2; text-align: left; }
     th { background: #fbfaf7; }
-    @media (max-width: 600px) { th, td { padding: 0.45rem; font-size: 0.86rem; } }
+    .charts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.5rem; }
+    figure { margin: 0; }
+    figure img { display: block; width: 100%; height: auto; border: 1px solid #dedbd2; }
+    figcaption { margin-top: 0.45rem; color: #57534e; font-size: 0.9rem; }
+    @media (max-width: 700px) {
+      th, td { padding: 0.45rem; font-size: 0.86rem; }
+      .charts { grid-template-columns: 1fr; }
+    }
   </style>
 </head>
 <body>
@@ -30,6 +37,8 @@
   <tbody><tr><td>1</td><td>Standard Q8</td><td>96.580s</td><td>Winner</td></tr>
   <tr><td>2</td><td>Speculative</td><td>209.712s</td><td>2.17x slower</td></tr></tbody></table>
   <h2>Detailed Charts</h2>
+  <div class="charts"><figure><a href="llama_bench_prefill_throughput.html"><img src="llama_bench_prefill_throughput.svg" alt="llama bench prefill throughput"></a><figcaption>Llama Bench Prefill Throughput</figcaption></figure><figure><a href="llama_bench_generation_throughput.html"><img src="llama_bench_generation_throughput.svg" alt="llama bench generation throughput"></a><figcaption>Llama Bench Generation Throughput</figcaption></figure><figure><a href="cli_wall_time.html"><img src="cli_wall_time.svg" alt="cli wall time"></a><figcaption>Cli Wall Time</figcaption></figure><figure><a href="thread_scaling_wall_time.html"><img src="thread_scaling_wall_time.svg" alt="thread scaling wall time"></a><figcaption>Thread Scaling Wall Time</figcaption></figure><figure><a href="speculative_wall_time.html"><img src="speculative_wall_time.svg" alt="speculative wall time"></a><figcaption>Speculative Wall Time</figcaption></figure><figure><a href="perf_summary.html"><img src="perf_summary.svg" alt="perf summary"></a><figcaption>Perf Summary</figcaption></figure></div>
+  <h2>Chart Files</h2>
   <ul><li><a href="llama_bench_prefill_throughput.html">llama_bench_prefill_throughput</a> (<a href="llama_bench_prefill_throughput.svg">SVG</a>)</li><li><a href="llama_bench_generation_throughput.html">llama_bench_generation_throughput</a> (<a href="llama_bench_generation_throughput.svg">SVG</a>)</li><li><a href="cli_wall_time.html">cli_wall_time</a> (<a href="cli_wall_time.svg">SVG</a>)</li><li><a href="thread_scaling_wall_time.html">thread_scaling_wall_time</a> (<a href="thread_scaling_wall_time.svg">SVG</a>)</li><li><a href="speculative_wall_time.html">speculative_wall_time</a> (<a href="speculative_wall_time.svg">SVG</a>)</li><li><a href="perf_summary.html">perf_summary</a> (<a href="perf_summary.svg">SVG</a>)</li></ul>
 </body>
 </html>

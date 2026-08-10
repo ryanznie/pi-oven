@@ -134,6 +134,18 @@ python3 scripts/analyze_results.py
 
 The report is written to `results/analytics/report.md`.
 
+The generated results page displays the comparison tables and charts inline:
+
+```text
+results/plots/index.html
+```
+
+A presentation-ready summary with the result charts is available at:
+
+```text
+results/pi-oven-benchmark-results.pptx
+```
+
 Useful ordering options:
 
 ```bash
