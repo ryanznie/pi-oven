@@ -140,11 +140,14 @@ The generated results page displays the comparison tables and charts inline:
 results/plots/index.html
 ```
 
-A presentation-ready summary with the result charts is available at:
+A presentation-ready summary with project motivation, a prefill/KV-cache/decode
+explainer, and the result charts is available at:
 
 ```text
-results/pi-oven-benchmark-results.pptx
+results/pi-oven-benchmark-results-with-background.pptx
 ```
+
+The original results-only deck remains at `results/pi-oven-benchmark-results.pptx`.
 
 Useful ordering options:
 
